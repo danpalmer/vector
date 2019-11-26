@@ -134,6 +134,8 @@ import CodeHeader from '@site/src/components/CodeHeader';
 
 </Tabs>
 
+For more information about unit tests check out [this guide][docs.setup.guides.unit-testing].
+
 ## Options
 
 import Fields from '@site/src/components/Fields';
@@ -704,3 +706,4 @@ Check whether a field exists or does not exist, depending on the provided valueb
 [docs.data-model#histograms]: /docs/about/data-model#histograms
 [docs.data-model#sets]: /docs/about/data-model#sets
 [docs.data-model#tags]: /docs/about/data-model#tags
+[docs.setup.guides.unit-testing]: /docs/setup/guides/unit-testing
