@@ -1,0 +1,41 @@
+[sinks.new_relic]
+batch_is_simple = true
+batch_size = 1049000
+batch_timeout = 5
+buffer = true
+common = true
+delivery_guarantee = "at_least_once"
+egress_method = "batching"
+function_category = "transmit"
+input_types = ["log"]
+healthcheck = true
+rate_limit_duration = 1
+rate_limit_num = 10
+retry_attempts = 10
+retry_backoff_secs = 1
+request_in_flight_limit = 10
+request_timeout_secs = 30
+write_to_description = "the New Relic log API"
+
+[sinks.new_relic.options.license_key]
+type = "string"
+examples = ["xxxx", "${LICENSE_KEY_ENV_VAR}"]
+null = true
+description = "Your New Relic license key (if applicable)."
+
+[sinks.new_relic.options.insert_key]
+type = "string"
+examples = ["xxxx", "${INSERT_KEY_ENV_VAR}"]
+null = true
+description = "Your New Relic insert key (if applicable)."
+
+[sinks.new_relic.options.region]
+type = "string"
+common = true
+default = "us"
+null = true
+description = "The API region to send logs to."
+
+[sinks.new_relic.options.region.enum]
+us = "The US region"
+eu = "The EU region"

@@ -402,6 +402,27 @@ module.exports = {
 
       ]
     },
+    "new_relic": {
+      "beta": false,
+      "delivery_guarantee": "at_least_once",
+      "event_types": [
+        "log"
+      ],
+      "function_category": "transmit",
+      "id": "new_relic_sink",
+      "name": "new_relic",
+      "operating_systems": [
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "service_provider": null,
+      "status": "prod-ready",
+      "type": "sink",
+      "unsupported_operating_systems": [
+
+      ]
+    },
     "prometheus": {
       "beta": true,
       "delivery_guarantee": "best_effort",
