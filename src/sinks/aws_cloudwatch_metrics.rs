@@ -4,6 +4,7 @@ use crate::{
     region::RegionOrEndpoint,
     sinks::util::{retries::RetryLogic, BatchConfig, MetricBuffer, SinkExt, TowerRequestConfig},
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use futures::{Future, Poll};
@@ -31,17 +32,18 @@ pub struct CloudWatchMetricsSinkConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: CloudWatchMetricsRequestConfig,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: Some(30),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(150),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    CloudWatchMetricsRequestConfig;
+    in_flight_limit = 5,
+    timeout = 30,
+    rate_limit_duration = 1,
+    rate_limit_num = 150,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 inventory::submit! {
     SinkDescription::new::<CloudWatchMetricsSinkConfig>("aws_cloudwatch_metrics")
@@ -72,7 +74,7 @@ impl CloudWatchMetricsSvc {
         let client = Self::create_client(config.region.clone().try_into()?)?;
 
         let batch = config.batch.unwrap_or(20, 1);
-        let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
+        let request = config.request.clone();
 
         let cloudwatch_metrics = CloudWatchMetricsSvc { client, config };
 

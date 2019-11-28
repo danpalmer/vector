@@ -6,6 +6,7 @@ use crate::{
         BatchConfig, MetricBuffer, SinkExt, TowerRequestConfig,
     },
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use chrono::{DateTime, Utc};
 use futures::{Future, Poll};
@@ -45,17 +46,18 @@ pub struct DatadogConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: DatadogRequestConfig,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: Some(60),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(5),
-    request_retry_attempts: Some(5),
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    DatadogRequestConfig;
+    in_flight_limit = 5,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 5,
+    retry_attempts = 5,
+    retry_backoff = 1,
+}
 
 pub fn default_host() -> String {
     String::from("https://api.datadoghq.com")
@@ -110,11 +112,11 @@ impl SinkConfig for DatadogConfig {
 impl DatadogSvc {
     pub fn new(config: DatadogConfig, acker: Acker) -> crate::Result<super::RouterSink> {
         let batch = config.batch.unwrap_or(20, 1);
-        let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
 
         let uri = format!("{}/api/v1/series?api_key={}", config.host, config.api_key)
             .parse::<Uri>()
             .context(super::UriParseError)?;
+        let request = config.request.clone();
 
         let http_service = HttpService::new(move |body: Vec<u8>| {
             let mut builder = hyper::Request::builder();

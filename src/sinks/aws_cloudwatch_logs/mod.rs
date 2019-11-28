@@ -7,10 +7,11 @@ use crate::{
     sinks::util::{
         retries::{FixedRetryPolicy, RetryLogic},
         BatchConfig, BatchServiceSink, PartitionBuffer, PartitionInnerBuffer, SinkExt,
-        TowerRequestConfig, TowerRequestSettings,
+        TowerRequestConfig,
     },
     template::Template,
     topology::config::{DataType, SinkConfig},
+    tower_request_config,
 };
 use bytes::Bytes;
 use futures::{future, stream::iter_ok, sync::oneshot, Async, Future, Poll, Sink};
@@ -62,17 +63,18 @@ pub struct CloudwatchLogsSinkConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: CloudwatchLogsRequestConfig,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: None,
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(5),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    CloudwatchLogsRequestConfig;
+    in_flight_limit = 5,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 5,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 pub struct CloudwatchLogsSvc {
     client: CloudWatchLogsClient,
@@ -100,7 +102,7 @@ type Svc = Buffer<
 pub struct CloudwatchLogsPartitionSvc {
     config: CloudwatchLogsSinkConfig,
     clients: HashMap<CloudwatchKey, Svc>,
-    request_settings: TowerRequestSettings,
+    request_settings: CloudwatchLogsRequestConfig,
 }
 
 #[derive(Deserialize, Serialize, Debug, Eq, PartialEq, Clone, Derivative)]
@@ -127,13 +129,12 @@ pub enum CloudwatchError {
 impl SinkConfig for CloudwatchLogsSinkConfig {
     fn build(&self, acker: Acker) -> crate::Result<(super::RouterSink, super::Healthcheck)> {
         let batch = self.batch.unwrap_or(1000, 1);
-        let request = self.request.unwrap_with(&REQUEST_DEFAULTS);
 
         let log_group = self.group_name.clone();
         let log_stream = self.stream_name.clone();
 
         let svc = ServiceBuilder::new()
-            .concurrency_limit(request.in_flight_limit)
+            .concurrency_limit(self.request.in_flight_limit())
             .service(CloudwatchLogsPartitionSvc::new(self.clone())?);
 
         let sink = {
@@ -159,8 +160,7 @@ impl SinkConfig for CloudwatchLogsSinkConfig {
 
 impl CloudwatchLogsPartitionSvc {
     pub fn new(config: CloudwatchLogsSinkConfig) -> crate::Result<Self> {
-        let request_settings = config.request.unwrap_with(&REQUEST_DEFAULTS);
-
+        let request_settings = config.request.clone();
         Ok(Self {
             config,
             clients: HashMap::new(),
@@ -181,15 +181,6 @@ impl Service<PartitionInnerBuffer<Vec<Event>, CloudwatchKey>> for CloudwatchLogs
     fn call(&mut self, req: PartitionInnerBuffer<Vec<Event>, CloudwatchKey>) -> Self::Future {
         let (events, key) = req.into_parts();
 
-        let TowerRequestSettings {
-            in_flight_limit: _,
-            timeout,
-            rate_limit_duration,
-            rate_limit_num,
-            retry_attempts: _,
-            retry_backoff: _,
-        } = self.request_settings;
-
         let svc = if let Some(svc) = &mut self.clients.get_mut(&key) {
             svc.clone()
         } else {
@@ -197,12 +188,16 @@ impl Service<PartitionInnerBuffer<Vec<Event>, CloudwatchKey>> for CloudwatchLogs
                 let policy = self.request_settings.retry_policy(CloudwatchRetryLogic);
 
                 let cloudwatch = CloudwatchLogsSvc::new(&self.config, &key).unwrap();
-                let timeout = Timeout::new(cloudwatch, timeout);
+                let timeout = Timeout::new(cloudwatch, self.request_settings.timeout());
 
                 let buffer = Buffer::new(timeout, 1);
                 let retry = Retry::new(policy, buffer);
 
-                let rate = RateLimit::new(retry, Rate::new(rate_limit_num, rate_limit_duration));
+                let rate = Rate::new(
+                    self.request_settings.rate_limit_num(),
+                    self.request_settings.rate_limit_duration(),
+                );
+                let rate = RateLimit::new(retry, rate);
                 let concurrency = ConcurrencyLimit::new(rate, 1);
 
                 Buffer::new(concurrency, 1)

@@ -8,6 +8,7 @@ use crate::{
     },
     template::Template,
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use bytes::Bytes;
 use chrono::Utc;
@@ -49,17 +50,18 @@ pub struct S3SinkConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: S3RequestConfig,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(25),
-    request_timeout_secs: None,
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(25),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    S3RequestConfig;
+    in_flight_limit = 25,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 25,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 #[derive(Deserialize, Serialize, Debug, Eq, PartialEq, Clone, Derivative)]
 #[serde(rename_all = "snake_case")]
@@ -113,7 +115,6 @@ enum HealthcheckError {
 
 impl S3Sink {
     pub fn new(config: &S3SinkConfig, acker: Acker) -> crate::Result<super::RouterSink> {
-        let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
         let encoding = config.encoding.clone();
 
         let compression = match config.compression {
@@ -139,7 +140,8 @@ impl S3Sink {
             filename_extension: config.filename_extension.clone(),
         };
 
-        let sink = request
+        let sink = config
+            .request
             .batch_sink(S3RetryLogic, s3, acker)
             .partitioned_batched_with_min(PartitionBuffer::new(Buffer::new(compression)), &batch)
             .with_flat_map(move |e| iter_ok(encode_event(e, &key_prefix, &encoding)));

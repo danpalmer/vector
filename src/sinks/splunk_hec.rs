@@ -7,6 +7,7 @@ use crate::{
         BatchConfig, Buffer, Compression, SinkExt, TowerRequestConfig,
     },
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use bytes::Bytes;
 use futures::{stream::iter_ok, Future, Sink};
@@ -36,18 +37,19 @@ pub struct HecSinkConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: SplunkRequestConfig,
     pub tls: Option<TlsOptions>,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(10),
-    request_timeout_secs: Some(60),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(10),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    SplunkRequestConfig;
+    in_flight_limit = 10,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 10,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 #[derive(Deserialize, Serialize, Debug, Clone, Derivative)]
 #[serde(rename_all = "snake_case")]
@@ -95,7 +97,7 @@ pub fn hec(config: HecSinkConfig, acker: Acker) -> crate::Result<super::RouterSi
         Compression::Gzip => true,
     };
     let batch = config.batch.unwrap_or(bytesize::mib(1u64), 1);
-    let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
+
     let encoding = config.encoding.clone();
 
     let uri = format!("{}/services/collector/event", host)
@@ -124,7 +126,8 @@ pub fn hec(config: HecSinkConfig, acker: Acker) -> crate::Result<super::RouterSi
                 builder.body(body).unwrap()
             });
 
-    let sink = request
+    let sink = config
+        .request
         .batch_sink(HttpRetryLogic, http_service, acker)
         .batched_with_min(Buffer::new(gzip), &batch)
         .with_flat_map(move |e| iter_ok(encode_event(&host_field, e, &encoding)));

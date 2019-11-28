@@ -4,6 +4,7 @@ use crate::{
     region::RegionOrEndpoint,
     sinks::util::{retries::RetryLogic, BatchConfig, SinkExt, TowerRequestConfig},
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use bytes::Bytes;
 use futures::{stream::iter_ok, Future, Poll, Sink};
@@ -37,17 +38,18 @@ pub struct KinesisSinkConfig {
     #[serde(default, flatten)]
     pub batch: BatchConfig,
     #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    pub request: KinesisRequestConfig,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: Some(30),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(5),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    KinesisRequestConfig;
+    in_flight_limit = 5,
+    timeout = 30,
+    rate_limit_duration = 1,
+    rate_limit_num = 5,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 #[derive(Deserialize, Serialize, Debug, Eq, PartialEq, Clone, Derivative)]
 #[serde(rename_all = "snake_case")]
@@ -88,9 +90,10 @@ impl KinesisService {
         let client = Arc::new(KinesisClient::new(config.region.clone().try_into()?));
 
         let batch = config.batch.unwrap_or(bytesize::mib(1u64), 1);
-        let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
+
         let encoding = config.encoding.clone();
         let partition_key_field = config.partition_key_field.clone();
+        let request = config.request.clone();
 
         let kinesis = KinesisService { client, config };
 

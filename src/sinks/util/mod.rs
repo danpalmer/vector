@@ -8,7 +8,6 @@ use crate::buffers::Acker;
 use futures::{
     future, stream::FuturesUnordered, Async, AsyncSink, Future, Poll, Sink, StartSend, Stream,
 };
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::time::Duration;
@@ -321,67 +320,19 @@ mod test {
     }
 }
 
-/// Tower Request based configuration
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
-pub struct TowerRequestConfig {
-    pub request_in_flight_limit: Option<usize>,        // 5
-    pub request_timeout_secs: Option<u64>,             // 60
-    pub request_rate_limit_duration_secs: Option<u64>, // 1
-    pub request_rate_limit_num: Option<u64>,           // 5
-    pub request_retry_attempts: Option<usize>,         // max_value()
-    pub request_retry_backoff_secs: Option<u64>,       // 1
-}
+pub trait TowerRequestConfig {
+    fn in_flight_limit(&self) -> usize;
+    fn timeout(&self) -> Duration;
+    fn rate_limit_duration(&self) -> Duration;
+    fn rate_limit_num(&self) -> u64;
+    fn retry_attempts(&self) -> usize;
+    fn retry_backoff(&self) -> Duration;
 
-impl TowerRequestConfig {
-    pub fn unwrap_with(&self, defaults: &TowerRequestConfig) -> TowerRequestSettings {
-        TowerRequestSettings {
-            in_flight_limit: self
-                .request_in_flight_limit
-                .or(defaults.request_in_flight_limit)
-                .unwrap_or(5),
-            timeout: Duration::from_secs(
-                self.request_timeout_secs
-                    .or(defaults.request_timeout_secs)
-                    .unwrap_or(60),
-            ),
-            rate_limit_duration: Duration::from_secs(
-                self.request_rate_limit_duration_secs
-                    .or(defaults.request_rate_limit_duration_secs)
-                    .unwrap_or(1),
-            ),
-            rate_limit_num: self
-                .request_rate_limit_num
-                .or(defaults.request_rate_limit_num)
-                .unwrap_or(5),
-            retry_attempts: self
-                .request_retry_attempts
-                .or(defaults.request_retry_attempts)
-                .unwrap_or(usize::max_value()),
-            retry_backoff: Duration::from_secs(
-                self.request_retry_backoff_secs
-                    .or(defaults.request_retry_backoff_secs)
-                    .unwrap_or(1),
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct TowerRequestSettings {
-    pub in_flight_limit: usize,
-    pub timeout: Duration,
-    pub rate_limit_duration: Duration,
-    pub rate_limit_num: u64,
-    pub retry_attempts: usize,
-    pub retry_backoff: Duration,
-}
-
-impl TowerRequestSettings {
-    pub fn retry_policy<L: RetryLogic>(&self, logic: L) -> FixedRetryPolicy<L> {
-        FixedRetryPolicy::new(self.retry_attempts, self.retry_backoff, logic)
+    fn retry_policy<L: RetryLogic>(&self, logic: L) -> FixedRetryPolicy<L> {
+        FixedRetryPolicy::new(self.retry_attempts(), self.retry_backoff(), logic)
     }
 
-    pub fn batch_sink<B, L, S, T>(
+    fn batch_sink<B, L, S, T>(
         &self,
         retry_logic: L,
         service: S,
@@ -401,12 +352,86 @@ impl TowerRequestSettings {
     {
         let policy = self.retry_policy(retry_logic);
         let service = ServiceBuilder::new()
-            .concurrency_limit(self.in_flight_limit)
-            .rate_limit(self.rate_limit_num, self.rate_limit_duration)
+            .concurrency_limit(self.in_flight_limit())
+            .rate_limit(self.rate_limit_num(), self.rate_limit_duration())
             .retry(policy)
-            .timeout(self.timeout)
+            .timeout(self.timeout())
             .service(service);
 
         BatchServiceSink::new(service, acker)
     }
+}
+
+#[macro_export]
+macro_rules! tower_request_config {
+    ($config:ident ; in_flight_limit = $value:expr , $($rest:tt)*) => {
+        fn request_in_flight_limit() -> usize { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+    ($config:ident ; timeout = $value:expr , $($rest:tt)*) => {
+        fn request_timeout_secs() -> u64 { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+    ($config:ident ; rate_limit_duration = $value:expr , $($rest:tt)*) => {
+        fn request_rate_limit_duration_secs() -> u64 { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+    ($config:ident ; rate_limit_num = $value:expr , $($rest:tt)*) => {
+        fn request_rate_limit_num() -> u64 { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+    ($config:ident ; retry_attempts = $value:expr , $($rest:tt)*) => {
+        fn request_retry_attempts() -> usize { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+    ($config:ident ; retry_backoff = $value:expr , $($rest:tt)*) => {
+        fn request_retry_backoff_secs() -> u64 { $value }
+        tower_request_config! { $config ; $($rest)* }
+    };
+
+    ($config:ident ;) => {
+        #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+        pub struct $config {
+            #[serde(default = "request_in_flight_limit")]
+            pub request_in_flight_limit: usize,
+            #[serde(default = "request_timeout_secs")]
+            pub request_timeout_secs: u64,
+            #[serde(default = "request_rate_limit_duration_secs")]
+            pub request_rate_limit_duration_secs: u64,
+            #[serde(default = "request_rate_limit_num")]
+            pub request_rate_limit_num: u64,
+            #[serde(default = "request_retry_attempts")]
+            pub request_retry_attempts: usize,
+            #[serde(default = "request_retry_backoff_secs")]
+            pub request_retry_backoff_secs: u64,
+        }
+
+        use std::time::Duration;
+
+        impl TowerRequestConfig for $config {
+            fn in_flight_limit(&self) -> usize {
+                self.request_in_flight_limit
+            }
+
+            fn timeout(&self) -> Duration {
+                Duration::from_secs(self.request_timeout_secs)
+            }
+
+            fn rate_limit_duration(&self) -> Duration {
+                Duration::from_secs(self.request_rate_limit_duration_secs)
+            }
+
+            fn rate_limit_num(&self) -> u64 {
+                self.request_rate_limit_num
+            }
+
+            fn retry_attempts(&self) -> usize {
+                self.request_retry_attempts
+            }
+
+            fn retry_backoff(&self) -> Duration {
+                Duration::from_secs(self.request_retry_backoff_secs)
+            }
+        }
+    };
 }

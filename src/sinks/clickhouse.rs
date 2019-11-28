@@ -8,6 +8,7 @@ use crate::{
         BatchConfig, Buffer, Compression, SinkExt, TowerRequestConfig,
     },
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use futures::{stream::iter_ok, Future, Sink};
 use headers::HeaderMapExt;
@@ -29,19 +30,20 @@ pub struct ClickhouseConfig {
     pub basic_auth: Option<ClickHouseBasicAuthConfig>,
     #[serde(default, flatten)]
     pub batch: BatchConfig,
-    #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    #[serde(flatten)]
+    pub request: ClickhouseRequestConfig,
     pub tls: Option<TlsOptions>,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: Some(60),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(5),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    ClickhouseRequestConfig;
+    in_flight_limit = 5,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 1,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 inventory::submit! {
     SinkDescription::new::<ClickhouseConfig>("clickhouse")
@@ -90,7 +92,6 @@ fn clickhouse(config: ClickhouseConfig, acker: Acker) -> crate::Result<super::Ro
     };
 
     let batch = config.batch.unwrap_or(bytesize::mib(10u64), 1);
-    let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
 
     let basic_auth = config.basic_auth.clone();
 
@@ -120,7 +121,8 @@ fn clickhouse(config: ClickhouseConfig, acker: Acker) -> crate::Result<super::Ro
                 request
             });
 
-    let sink = request
+    let sink = config
+        .request
         .batch_sink(
             ClickhouseRetryLogic {
                 inner: HttpRetryLogic,
@@ -268,8 +270,8 @@ mod integration_tests {
                 batch_size: Some(1),
                 batch_timeout: None,
             },
-            request: TowerRequestConfig {
-                request_retry_attempts: Some(1),
+            request: ClickhouseRequestConfig {
+                request_retry_attempts: 1,
                 ..Default::default()
             },
             ..Default::default()

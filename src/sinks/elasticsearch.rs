@@ -9,6 +9,7 @@ use crate::{
     },
     template::Template,
     topology::config::{DataType, SinkConfig, SinkDescription},
+    tower_request_config,
 };
 use futures::{stream::iter_ok, Future, Sink};
 use http::{uri::InvalidUri, Method, Uri};
@@ -41,8 +42,8 @@ pub struct ElasticSearchConfig {
     // passed. See https://github.com/timberio/vector/issues/1160
     #[serde(flatten)]
     pub region: RegionOrEndpoint,
-    #[serde(default, flatten)]
-    pub request: TowerRequestConfig,
+    #[serde(flatten)]
+    pub request: ElasticsearchRequestConfig,
     pub basic_auth: Option<ElasticSearchBasicAuthConfig>,
 
     pub headers: Option<HashMap<String, String>>,
@@ -51,14 +52,15 @@ pub struct ElasticSearchConfig {
     pub tls: Option<TlsOptions>,
 }
 
-const REQUEST_DEFAULTS: TowerRequestConfig = TowerRequestConfig {
-    request_in_flight_limit: Some(5),
-    request_timeout_secs: Some(60),
-    request_rate_limit_duration_secs: Some(1),
-    request_rate_limit_num: Some(5),
-    request_retry_attempts: None,
-    request_retry_backoff_secs: None,
-};
+tower_request_config! {
+    ElasticsearchRequestConfig;
+    in_flight_limit = 5,
+    timeout = 60,
+    rate_limit_duration = 1,
+    rate_limit_num = 5,
+    retry_attempts = usize::max_value(),
+    retry_backoff = 1,
+}
 
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
@@ -207,7 +209,6 @@ fn es(
     };
 
     let batch = config.batch.unwrap_or(bytesize::mib(10u64), 1);
-    let request = config.request.unwrap_with(&REQUEST_DEFAULTS);
 
     let index = if let Some(idx) = &config.index {
         Template::from(idx.as_str())
@@ -286,7 +287,8 @@ fn es(
             }
         });
 
-    let sink = request
+    let sink = config
+        .request
         .batch_sink(HttpRetryLogic, http_service, acker)
         .batched_with_min(Buffer::new(gzip), &batch)
         .with_flat_map(move |e| iter_ok(encode_event(e, &index, &doc_type, &id_key)));
