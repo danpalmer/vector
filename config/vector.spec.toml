@@ -3025,18 +3025,18 @@ end
     key_path = "/path/to/host_certificate.key"
 
 # Batches `log` events to the New Relic log API.
-[sinks.new_relic]
+[sinks.new_relic_logs]
   #
   # General
   #
 
   # The component type. This is a required field that tells Vector which
-  # component to use. The value _must_ be `new_relic`.
+  # component to use. The value _must_ be `new_relic_logs`.
   # 
   # * required
   # * type: string
-  # * must be: "new_relic"
-  type = "new_relic"
+  # * must be: "new_relic_logs"
+  type = "new_relic_logs"
 
   # A list of upstream source or transform IDs. See configuration for more info.
   # 
@@ -3154,7 +3154,7 @@ end
   # Buffer
   #
 
-  [sinks.new_relic.buffer]
+  [sinks.new_relic_logs.buffer]
     # The buffer's type / location. `disk` buffers are persistent and will be
     # retained between restarts.
     # 

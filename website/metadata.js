@@ -402,15 +402,15 @@ module.exports = {
 
       ]
     },
-    "new_relic": {
+    "new_relic_logs": {
       "beta": false,
       "delivery_guarantee": "at_least_once",
       "event_types": [
         "log"
       ],
       "function_category": "transmit",
-      "id": "new_relic_sink",
-      "name": "new_relic",
+      "id": "new_relic_logs_sink",
+      "name": "new_relic_logs",
       "operating_systems": [
         "linux",
         "macos",

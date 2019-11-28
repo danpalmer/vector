@@ -1,12 +1,12 @@
 ---
 delivery_guarantee: "at_least_once"
 event_types: ["log"]
-issues_url: https://github.com/timberio/vector/issues?q=is%3Aopen+is%3Aissue+label%3A%22sink%3A+new_relic%22
+issues_url: https://github.com/timberio/vector/issues?q=is%3Aopen+is%3Aissue+label%3A%22sink%3A+new_relic_logs%22
 operating_systems: ["linux","macos","windows"]
-sidebar_label: "new_relic|[\"log\"]"
-source_url: https://github.com/timberio/vector/tree/master/src/sinks/new_relic.rs
+sidebar_label: "new_relic_logs|[\"log\"]"
+source_url: https://github.com/timberio/vector/tree/master/src/sinks/new_relic_logs.rs
 status: "prod-ready"
-title: "new_relic sink"
+title: "new_relic_logs sink"
 unsupported_operating_systems: []
 ---
 
@@ -15,10 +15,10 @@ unsupported_operating_systems: []
 
      To make changes please edit the template located at:
 
-     website/docs/reference/sinks/new_relic.md.erb
+     website/docs/reference/sinks/new_relic_logs.md.erb
 -->
 
-The `new_relic` sink [batches](#buffers-and-batches) [`log`][docs.data-model#log] events to the New Relic log API.
+The `new_relic_logs` sink [batches](#buffers-and-batches) [`log`][docs.data-model#log] events to the New Relic log API.
 
 ## Configuration
 
@@ -44,7 +44,7 @@ import CodeHeader from '@site/src/components/CodeHeader';
 ```toml
 [sinks.my_sink_id]
   # REQUIRED
-  type = "new_relic" # example, must be: "new_relic"
+  type = "new_relic_logs" # example, must be: "new_relic_logs"
   inputs = ["my-source-id"] # example
   
   # OPTIONAL
@@ -59,7 +59,7 @@ import CodeHeader from '@site/src/components/CodeHeader';
 ```toml
 [sinks.my_sink_id]
   # REQUIRED - General
-  type = "new_relic" # example, must be: "new_relic"
+  type = "new_relic_logs" # example, must be: "new_relic_logs"
   inputs = ["my-source-id"] # example
   
   # OPTIONAL - General
@@ -500,7 +500,7 @@ The amount of time to wait before attempting a failed request again. See [Retry 
 
 ## Output
 
-The `new_relic` sink [batches](#buffers-and-batches) [`log`][docs.data-model#log] events to the New Relic log API.
+The `new_relic_logs` sink [batches](#buffers-and-batches) [`log`][docs.data-model#log] events to the New Relic log API.
 Batches are flushed via the [`batch_size`](#batch_size) or
 [`batch_timeout`](#batch_timeout) options. You can learn more in the [buffers &
 batches](#buffers--batches) section.
@@ -513,7 +513,7 @@ import SVG from 'react-inlinesvg';
 
 <SVG src="/img/buffers-and-batches-serial.svg" />
 
-The `new_relic` sink buffers & batches data as
+The `new_relic_logs` sink buffers & batches data as
 shown in the diagram above. You'll notice that Vector treats these concepts
 differently, instead of treating them as global concepts, Vector treats them
 as sink specific concepts. This isolates sinks, ensuring services disruptions
@@ -566,7 +566,7 @@ more than the specified number of requests are in-flight at any given time.
 
 Please note, Vector's defaults are carefully chosen and it should be rare that
 you need to adjust these. If you found a good reason to do so please share it
-with the Vector team by [opening an issie][urls.new_new_relic_sink_issue].
+with the Vector team by [opening an issie][urls.new_new_relic_logs_sink_issue].
 
 ### Retry Policy
 
@@ -579,4 +579,4 @@ attempts and backoff rate with the[`retry_attempts`](#retry_attempts) and[`retry
 [docs.data-model#event]: /docs/about/data-model#event
 [docs.data-model#log]: /docs/about/data-model#log
 [docs.guarantees]: /docs/about/guarantees
-[urls.new_new_relic_sink_issue]: https://github.com/timberio/vector/issues/new?labels=sink%3A+new_relic
+[urls.new_new_relic_logs_sink_issue]: https://github.com/timberio/vector/issues/new?labels=sink%3A+new_relic_logs
